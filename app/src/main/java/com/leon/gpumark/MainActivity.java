@@ -1,14 +1,20 @@
 package com.leon.gpumark;
 
 import android.content.Context;
+import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
+import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -22,18 +28,39 @@ import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
 
     private String[] gpuName = {"GTX 1080 Ti", "GTX 1080", "GTX 1070", "GTX 970"};
     private int[] gpuBenchmark = {13345, 11995, 11023, 8558};
     private float[] lowPrice = {5000, 3500, 2500, 970};
     private float[] highPrice = {6000, 4500, 3500, 1300};
 
+    private static final String dataFileName = "ALL";
+    private static final String NVIDIADataFileName = "NVIDIA";
+    private static final String AMDDataFileName = "AMD";
+
+    private ProgressBar progressLoading;
+    private ViewPropertyAnimator loadinAanimator;
+
+    private ScrollView scrollView;
     private LinearLayout chartContainer;
+
     private ArrayList<GraphicsCard> cardArrayList = new ArrayList<>();
+    private ArrayList<GraphicsCard> NVIDIAList = new ArrayList<>();
+    private ArrayList<GraphicsCard> AMDList = new ArrayList<>();
+    private int currentCompany;
 
     private RequestQueue requestQueue;
     private String[] url = {
@@ -47,13 +74,32 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        progressLoading = (ProgressBar) findViewById(R.id.progress_loading);
+        scrollView = (ScrollView) findViewById(R.id.scroll_view);
+
+        //progressLoading.setVisibility(View.INVISIBLE);
+        progressLoading.setAlpha(0);
+        loadinAanimator = progressLoading.animate();
+        loadinAanimator.setDuration(300);
         chartContainer = (LinearLayout) findViewById(R.id.chart_container);
+
+        Spinner spinner = (Spinner) findViewById(R.id.spinner);
+        spinner.setOnItemSelectedListener(this);
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
+                R.array.planets_array, android.R.layout.simple_spinner_item);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        currentCompany = 0;
+
         requestQueue = Volley.newRequestQueue(this);
 
         updateData(1);
     }
 
     private void updateData(final int urlIndex) {
+
+        //progressLoading.setVisibility(View.VISIBLE);
+        loadinAanimator.alpha(1);
         Log.w("updateData", urlIndex + " " + url[urlIndex]);
         StringRequest stringRequest = new StringRequest(Request.Method.GET, url[urlIndex],
                 new Response.Listener<String>() {
@@ -69,14 +115,22 @@ public class MainActivity extends AppCompatActivity {
                                 parseFuturemarkData(response);
                                 break;
                         }
+                        //progressLoading.setVisibility(View.INVISIBLE);
+                        loadinAanimator.alpha(0);
                         drawAllCharts();
+                        saveData();
+                        //drawAllAsync();
                     }
                 },
                 new Response.ErrorListener() {
                     @Override
                     public void onErrorResponse(VolleyError error) {
                         Log.w("GPUMark", "onErrorResponse");
+                        //progressLoading.setVisibility(View.INVISIBLE);
+                        loadinAanimator.alpha(0);
                         Toast.makeText(MainActivity.this, "网络错误，请稍后重试", Toast.LENGTH_SHORT).show();
+                        readData();
+                        drawAllCharts();
                     }
                 }
         );
@@ -167,10 +221,43 @@ public class MainActivity extends AppCompatActivity {
             card.lowPrice = 1000;
             
             cardArrayList.add(card);
+
             if(!card.isNotebook && !card.company.equals("Intel"))
                 count ++;
+            switch (card.company){
+                case "NVIDIA":
+                    NVIDIAList.add(card);
+                    break;
+                case "AMD":
+                    AMDList.add(card);
+                    break;
+            }
             if(count == 100)
                 break;
+        }
+    }
+
+    private void showLoading(Boolean show){
+        if(show){
+            progressLoading.setAlpha(0);
+            progressLoading.setVisibility(View.VISIBLE);
+            loadinAanimator.alpha(1);
+        }
+        else{
+            progressLoading.setAlpha(1);
+            loadinAanimator.alpha(0);
+            loadinAanimator.withEndAction(new Runnable() {
+                @Override
+                public void run() {
+                    progressLoading.setVisibility(View.INVISIBLE);
+                }
+            });
+        }
+    }
+
+    private void drawAllAsync(){
+        for(int i = 0; i < cardArrayList.size(); i ++){
+            new DrawChartTask().execute(cardArrayList.get(i));
         }
     }
 
@@ -178,10 +265,24 @@ public class MainActivity extends AppCompatActivity {
         /*for(int i = 0; i < gpuName.length; i ++){
             drawChart(i);
         }*/
-
+        currentCompany = 0;
         for(int i = 0; i < cardArrayList.size(); i ++){
             drawChart(cardArrayList.get(i));
         }
+    }
+
+    private void drawNVIDIACharts(){
+        for(int i = 0; i < NVIDIAList.size(); i ++)
+            drawChart(NVIDIAList.get(i));
+    }
+
+    private void drawAMDCharts(){
+        for(int i = 0; i < AMDList.size(); i ++)
+            drawChart(AMDList.get(i));
+    }
+
+    private void clearCharts(){
+        chartContainer.removeAllViews();
     }
 
     private void drawChart(GraphicsCard card){
@@ -206,11 +307,16 @@ public class MainActivity extends AppCompatActivity {
         dataPoint[0] = new DataPoint(card.lowPrice, (float)card.benchmark / card.lowPrice);
         dataPoint[1] = new DataPoint(card.highPrice, (float)card.benchmark / card.highPrice);
         LineGraphSeries<DataPoint> series = new LineGraphSeries<>(dataPoint);
-        series.setAnimated(true);
+        //series.setAnimated(true);
 
         graph.addSeries(series);
         graph.setTitle(card.name + " - " + card.benchmark);
         graph.setTitleTextSize(30);
+
+        graph.setAlpha(0);
+        ViewPropertyAnimator animator = graph.animate();
+        animator.setDuration(500);
+        animator.alpha(0.9f);
     }
 
     private void drawChart(int index){
@@ -241,4 +347,153 @@ public class MainActivity extends AppCompatActivity {
         //ViewPropertyAnimator animator = graph.animate();
 
     }
+
+    public void onItemSelected(AdapterView<?> parent, View view,
+                               int pos, long id) {
+        // An item was selected. You can retrieve the selected item using
+        // parent.getItemAtPosition(pos)
+        Log.w("onItemSelected", pos + "");
+        if(currentCompany == pos)
+            return;
+        chartContainer.removeAllViews();
+        currentCompany = pos;
+        switch (pos){
+            case 0:
+                drawAllCharts();
+                break;
+            case 1:
+                drawNVIDIACharts();
+                break;
+            case 2:
+                drawAMDCharts();
+                break;
+        }
+        scrollView.scrollTo(0, 0);
+    }
+
+    public void onNothingSelected(AdapterView<?> parent) {
+        // Another interface callback
+    }
+
+    private void saveData() {
+
+        try {
+            FileOutputStream fos = openFileOutput(dataFileName, Context.MODE_PRIVATE);
+            ObjectOutputStream os = new ObjectOutputStream(fos);
+            os.writeObject(cardArrayList);
+            os.close();
+            fos.close();
+
+            fos = openFileOutput(NVIDIADataFileName, Context.MODE_PRIVATE);
+            os = new ObjectOutputStream(fos);
+            os.writeObject(NVIDIAList);
+            os.close();
+            fos.close();
+
+            fos = openFileOutput(AMDDataFileName, Context.MODE_PRIVATE);
+            os = new ObjectOutputStream(fos);
+            os.writeObject(AMDList);
+            os.close();
+            fos.close();
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void readData(){
+
+        try {
+            FileInputStream fis = openFileInput(dataFileName);
+            ObjectInputStream is = new ObjectInputStream(fis);
+            cardArrayList = (ArrayList<GraphicsCard>) is.readObject();
+            is.close();
+            fis.close();
+
+            fis = openFileInput(NVIDIADataFileName);
+            is = new ObjectInputStream(fis);
+            NVIDIAList = (ArrayList<GraphicsCard>) is.readObject();
+            is.close();
+            fis.close();
+
+            fis = openFileInput(AMDDataFileName);
+            is = new ObjectInputStream(fis);
+            AMDList = (ArrayList<GraphicsCard>) is.readObject();
+            is.close();
+            fis.close();
+
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private class DrawChartTask extends AsyncTask<GraphicsCard, Integer, GraphicsCard> {
+        protected GraphicsCard doInBackground(GraphicsCard ... card) {
+            final GraphicsCard graphicsCard = card[0];
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if(graphicsCard.isNotebook || graphicsCard.company.equals("Intel"))
+                        return;
+                    GraphView graph = new GraphView(getApplicationContext());
+                    graph.setMinimumHeight(400);
+                    LinearLayout.LayoutParams lparams = new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    graph.setLayoutParams(lparams);
+                    chartContainer.addView(graph);
+
+                    graph.getViewport().setMinX(graphicsCard.lowPrice);
+                    graph.getViewport().setMaxX(graphicsCard.highPrice);
+                    graph.getViewport().setScalable(true);
+
+                    DataPoint[] dataPoint = new DataPoint[2];
+                    dataPoint[0] = new DataPoint(graphicsCard.lowPrice, (float)graphicsCard.benchmark / graphicsCard.lowPrice);
+                    dataPoint[1] = new DataPoint(graphicsCard.highPrice, (float)graphicsCard.benchmark / graphicsCard.highPrice);
+                    LineGraphSeries<DataPoint> series = new LineGraphSeries<>(dataPoint);
+                    //series.setAnimated(true);
+
+                    graph.addSeries(series);
+                    graph.setTitle(graphicsCard.name + " - " + graphicsCard.benchmark);
+                    graph.setTitleTextSize(30);
+
+                    graph.setAlpha(0);
+                    ViewPropertyAnimator animator = graph.animate();
+                    animator.setDuration(500);
+                    animator.alpha(0.9f);
+                }
+            });
+            return card[0];
+        }
+
+        protected void onProgressUpdate(Integer... progress) {
+
+        }
+
+        protected void onPostExecute(GraphicsCard card) {
+            /*if(card.isNotebook || card.company.equals("Intel"))
+                return;
+            GraphView graph = new GraphView(getApplicationContext());
+            graph.setMinimumHeight(400);
+            LinearLayout.LayoutParams lparams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            graph.setLayoutParams(lparams);
+            chartContainer.addView(graph);
+
+            graph.getViewport().setMinX(card.lowPrice);
+            graph.getViewport().setMaxX(card.highPrice);
+            graph.getViewport().setScalable(true);
+
+            DataPoint[] dataPoint = new DataPoint[2];
+            dataPoint[0] = new DataPoint(card.lowPrice, (float)card.benchmark / card.lowPrice);
+            dataPoint[1] = new DataPoint(card.highPrice, (float)card.benchmark / card.highPrice);
+            LineGraphSeries<DataPoint> series = new LineGraphSeries<>(dataPoint);
+            series.setAnimated(true);
+
+            graph.addSeries(series);
+            graph.setTitle(card.name + " - " + card.benchmark);
+            graph.setTitleTextSize(30);*/
+        }
+    }
+
 }
