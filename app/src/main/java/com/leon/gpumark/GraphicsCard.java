@@ -1,10 +1,14 @@
 package com.leon.gpumark;
 
+import android.util.Log;
+
+import java.io.Serializable;
+
 /**
  * Created by haobo on 17.9.6.
  */
 
-public class GraphicsCard {
+public class GraphicsCard implements Serializable {
     public String name;
     public int benchmark;
     public int highPrice;
@@ -67,5 +71,43 @@ public class GraphicsCard {
                 company = "AMD";
                 break;
         }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out){
+        Log.w("writeObject", name);
+        try{
+            out.write(name.getBytes());
+            out.writeInt(benchmark);
+            out.writeInt(highPrice);
+            out.writeInt(lowPrice);
+            out.write(company.getBytes());
+            //out.write(type.getBytes());
+            //out.write(subType.getBytes());
+            out.write(detailURL.getBytes());
+            out.writeBoolean(isNotebook);
+        }
+        catch(Exception e){
+            e.printStackTrace();
+        }
+    }
+    private void readObject(java.io.ObjectInputStream in){
+        Log.w("readObject", "");
+        try{
+
+            name = "test";
+            benchmark = 1000;
+            highPrice = 2000;
+            lowPrice = 1000;
+            company = "NVIDIA";
+            detailURL = "g";
+            isNotebook = false;
+        }
+        catch(Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    private void readObjectNoData(){
+
     }
 }
