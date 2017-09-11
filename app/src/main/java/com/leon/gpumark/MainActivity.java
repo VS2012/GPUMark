@@ -2,20 +2,18 @@ package com.leon.gpumark;
 
 import android.content.Context;
 import android.os.AsyncTask;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.RelativeLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.android.volley.Request;
@@ -28,17 +26,17 @@ import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
-import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.OutputStreamWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collection;
+import java.util.Dictionary;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
 public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
 
@@ -52,21 +50,26 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     private static final String AMDDataFileName = "AMD";
 
     private ProgressBar progressLoading;
-    private ViewPropertyAnimator loadinAanimator;
+    private ViewPropertyAnimator loadingAnimator;
 
     private ScrollView scrollView;
     private LinearLayout chartContainer;
 
+    private ArrayList<ArrayList<XianyuItem>> xianyuItemList = new ArrayList<>();
     private ArrayList<GraphicsCard> cardArrayList = new ArrayList<>();
+    private HashMap<String, GraphicsCard> allCardMap = new HashMap<>();
+
     private ArrayList<GraphicsCard> NVIDIAList = new ArrayList<>();
     private ArrayList<GraphicsCard> AMDList = new ArrayList<>();
     private int currentCompany;
 
     private RequestQueue requestQueue;
-    private String[] url = {
+    private String futuremarkURL = "https://www.futuremark.com/hardware/gpu";
+    /*private String[] url = {
             "https://www.videocardbenchmark.net/high_end_gpus.html",
             "https://www.futuremark.com/hardware/gpu"
-    };
+    };*/
+    private static final String xianyuRequestURL = "http://s.ershou.taobao.com/list/list.htm?q=";
     private boolean removeNotebook = true;
 
     @Override
@@ -79,8 +82,8 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
         //progressLoading.setVisibility(View.INVISIBLE);
         progressLoading.setAlpha(0);
-        loadinAanimator = progressLoading.animate();
-        loadinAanimator.setDuration(300);
+        loadingAnimator = progressLoading.animate();
+        loadingAnimator.setDuration(300);
         chartContainer = (LinearLayout) findViewById(R.id.chart_container);
 
         Spinner spinner = (Spinner) findViewById(R.id.spinner);
@@ -92,32 +95,34 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         currentCompany = 0;
 
         requestQueue = Volley.newRequestQueue(this);
-
         updateData(1);
     }
 
     private void updateData(final int urlIndex) {
 
         //progressLoading.setVisibility(View.VISIBLE);
-        loadinAanimator.alpha(1);
-        Log.w("updateData", urlIndex + " " + url[urlIndex]);
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url[urlIndex],
+        loadingAnimator.alpha(1);
+        Log.w("updateData", futuremarkURL);
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, futuremarkURL,
                 new Response.Listener<String>() {
                     @Override
                     public void onResponse(String response) {
                         Log.w("GPUMark", "onResponse");
                         //Log.w("GPUMark", response.length() + response);
-                        switch (urlIndex){
+                        /*switch (urlIndex){
                             case 0:
                                 parsePassmarkData(response);
                                 break;
                             case 1:
                                 parseFuturemarkData(response);
                                 break;
-                        }
+                        }*/
                         //progressLoading.setVisibility(View.INVISIBLE);
-                        loadinAanimator.alpha(0);
+                        parseFuturemarkData(response);
+                        loadingAnimator.alpha(0);
                         drawAllCharts();
+                        requestPriceData(0);
+                        //requestAllPriceData();
                         saveData();
                         //drawAllAsync();
                     }
@@ -127,7 +132,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                     public void onErrorResponse(VolleyError error) {
                         Log.w("GPUMark", "onErrorResponse");
                         //progressLoading.setVisibility(View.INVISIBLE);
-                        loadinAanimator.alpha(0);
+                        loadingAnimator.alpha(0);
                         Toast.makeText(MainActivity.this, "网络错误，请稍后重试", Toast.LENGTH_SHORT).show();
                         readData();
                         drawAllCharts();
@@ -137,7 +142,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         requestQueue.add(stringRequest);
     }
 
-    private void parsePassmarkData(String data){
+    private void parsePassmarkData(String data) {
         int count = 0;
         int start = 0;
         while (start+1 < data.length()){
@@ -152,7 +157,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
             int nameStart = data.indexOf(">", start) + 1;
             int nameEnd = data.indexOf("<", nameStart);
             String name = data.substring(nameStart, nameEnd);
-            Log.w("name", name);
+            Log.w("fullName", name);
 
             String namePrefix = name.split(" ")[0];
             switch (namePrefix){
@@ -180,7 +185,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                 break;
 
             GraphicsCard card = new GraphicsCard();
-            card.name = name;
+            card.fullName = name;
             card.benchmark = benchmarkInt;
             card.lowPrice = 1000;
             card.highPrice = 2000;
@@ -192,7 +197,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     }
 
     private void parseFuturemarkData(String data){
-        int start = 0;
+        int start = 5012;
         int count = 0;
         while (start < data.length()){
             start = data.indexOf("nameBold", start + 1);
@@ -200,16 +205,16 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                 break;
 
             int hrefStart = start + 16;
-            int hrefEnd = data.indexOf(">", hrefStart) - 1;
-            String href = data.substring(hrefStart, hrefEnd);
+            int hrefEnd = data.indexOf(">", hrefStart) - 2;
+            String href = "https://www.futuremark.com" + data.substring(hrefStart, hrefEnd);
             Log.w("href", href);
 
-            int nameStart = hrefEnd + 2;
+            int nameStart = hrefEnd + 3;
             int nameEnd = data.indexOf("<", nameStart);
             String name = data.substring(nameStart, nameEnd);
-            Log.w("name", name);
+            Log.w("fullName", name);
 
-            String company = name.split(" ")[0];
+            //String company = name.split(" ")[0];
 
             int benchmarkStart = data.indexOf("barScore", nameEnd) + 11;
             int benchmarkEnd = data.indexOf("<", benchmarkStart);
@@ -221,6 +226,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
             card.lowPrice = 1000;
             
             cardArrayList.add(card);
+            allCardMap.put(card.keyWord, card);
 
             if(!card.isNotebook && !card.company.equals("Intel"))
                 count ++;
@@ -241,12 +247,12 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         if(show){
             progressLoading.setAlpha(0);
             progressLoading.setVisibility(View.VISIBLE);
-            loadinAanimator.alpha(1);
+            loadingAnimator.alpha(1);
         }
         else{
             progressLoading.setAlpha(1);
-            loadinAanimator.alpha(0);
-            loadinAanimator.withEndAction(new Runnable() {
+            loadingAnimator.alpha(0);
+            loadingAnimator.withEndAction(new Runnable() {
                 @Override
                 public void run() {
                     progressLoading.setVisibility(View.INVISIBLE);
@@ -310,7 +316,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         //series.setAnimated(true);
 
         graph.addSeries(series);
-        graph.setTitle(card.name + " - " + card.benchmark);
+        graph.setTitle(card.fullName + " - " + card.benchmark);
         graph.setTitleTextSize(30);
 
         graph.setAlpha(0);
@@ -428,6 +434,110 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         }
     }
 
+    private void requestAllPriceData(){
+        for(int i = 0; i < cardArrayList.size(); i ++){
+            requestPriceData(i);
+        }
+    }
+
+    private void requestPriceData(final int index){
+        loadingAnimator.alpha(1);
+        final String keyWord = cardArrayList.get(index).keyWord;
+        Log.w("request", xianyuRequestURL + keyWord);
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, xianyuRequestURL + keyWord,
+                new Response.Listener<String>() {
+                    @Override
+                    public void onResponse(String response) {
+                        Log.w("GPUMark", "onResponse " + keyWord);
+                        loadingAnimator.alpha(0);
+                        parsePriceData(response, keyWord);
+                        if(index < cardArrayList.size() - 1){
+                            int next = index;
+                            next ++;
+                            requestPriceData(next);
+                        }
+                    }
+                },
+                new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        Log.w("GPUMark", "onErrorResponse " + keyWord);
+                        error.printStackTrace();
+                        //progressLoading.setVisibility(View.INVISIBLE);
+                        loadingAnimator.alpha(0);
+                        Toast.makeText(MainActivity.this, "网络错误，请稍后重试", Toast.LENGTH_SHORT).show();
+                        //readData();
+                        //drawAllCharts();
+                    }
+                }
+        );
+        requestQueue.add(stringRequest);
+    }
+
+    private void parsePriceData(String data, String keyWord){
+
+        ArrayList<XianyuItem> list = new ArrayList<>();
+        int start = 51200;
+        while(start < data.length()) {
+
+            start = data.indexOf("item-info", start + 1);
+            if (start == -1)
+                return;
+
+            int hrefStart = data.indexOf("href", start) + 6; //存疑
+            int hrefEnd = data.indexOf("target", hrefStart) - 2;
+            String href = "http:" + data.substring(hrefStart, hrefEnd);
+            //Log.w("priceData-href", href);
+
+            int titleStart = data.indexOf("title", hrefEnd) + 6;
+            int titleEnd = data.indexOf(">", titleStart);
+            String title = data.substring(titleStart, titleEnd);
+            //Log.w("priceData-title", title);
+
+            int priceStart = data.indexOf("item-price", titleEnd) + 59; //存疑
+            int priceEnd = data.indexOf("<", priceStart);
+            String priceStr = data.substring(priceStart, priceEnd);
+            float price = Float.parseFloat(priceStr);
+            //Log.w("priceData-price", priceStr + "," + price);
+
+            int locationStart = data.indexOf("item-location", priceEnd) + 15;
+            int locationEnd = data.indexOf("<", locationStart);
+            String location = data.substring(locationStart, locationEnd);
+            //Log.w("priceData-location", location);
+
+            int briefDescStart = data.indexOf("brief-desc", locationEnd) + 12;
+            int briefDescEnd = data.indexOf("</", briefDescStart);
+            String briefDesc = data.substring(briefDescStart, briefDescEnd);
+            //Log.w("priceData-briefDesc", briefDesc);
+
+            XianyuItem item = new XianyuItem(keyWord, title, href, price, location, briefDesc);
+            list.add(item);
+        }
+        analyzePriceData(list, keyWord);
+        xianyuItemList.add(list);
+    }
+
+    private void analyzeAllPriceData(){
+        for(int i = 0; i < xianyuItemList.size(); i ++){
+            //analyzePriceData(xianyuItemList.get(i));
+        }
+    }
+
+    private void analyzePriceData(ArrayList<XianyuItem> list, String keyWord){
+        GraphicsCard card = allCardMap.get(keyWord);
+        int count = 0;
+        float totalPrice = 0;
+        for(int i = 0; i < list.size(); i ++){
+            XianyuItem item = list.get(i);
+            if(!item.isInvalidItem()){
+                count ++;
+                totalPrice += item.price;
+            }
+        }
+        float averagePrice = totalPrice / count;
+        Log.w("analyzePriceData", keyWord + " " + averagePrice);
+    }
+
     private class DrawChartTask extends AsyncTask<GraphicsCard, Integer, GraphicsCard> {
         protected GraphicsCard doInBackground(GraphicsCard ... card) {
             final GraphicsCard graphicsCard = card[0];
@@ -454,7 +564,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                     //series.setAnimated(true);
 
                     graph.addSeries(series);
-                    graph.setTitle(graphicsCard.name + " - " + graphicsCard.benchmark);
+                    graph.setTitle(graphicsCard.fullName + " - " + graphicsCard.benchmark);
                     graph.setTitleTextSize(30);
 
                     graph.setAlpha(0);
@@ -491,7 +601,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
             series.setAnimated(true);
 
             graph.addSeries(series);
-            graph.setTitle(card.name + " - " + card.benchmark);
+            graph.setTitle(card.fullName + " - " + card.benchmark);
             graph.setTitleTextSize(30);*/
         }
     }

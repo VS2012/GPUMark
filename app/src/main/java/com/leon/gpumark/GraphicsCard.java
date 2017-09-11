@@ -1,7 +1,5 @@
 package com.leon.gpumark;
 
-import android.util.Log;
-
 import java.io.Serializable;
 
 /**
@@ -9,7 +7,7 @@ import java.io.Serializable;
  */
 
 public class GraphicsCard implements Serializable {
-    public String name;
+    public String fullName;
     public int benchmark;
     public int highPrice;
     public int lowPrice;
@@ -18,28 +16,40 @@ public class GraphicsCard implements Serializable {
     public String subType;
     public String detailURL;
     public boolean isNotebook = false;
+    public String keyWord;
 
     public GraphicsCard(String name, int benchmark, String detailURL){
-        this.name = name;
+        setFullName(name);
         this.benchmark = benchmark;
         this.detailURL = detailURL;
-        String[] nameSplit = name.split(" ");
-        company = nameSplit[0];
-
-        if(name.contains("Notebook") || name.contains("Surface"))
-            isNotebook = true;
-
-        if(nameSplit[nameSplit.length - 1].contains("M"))
-            isNotebook = true;
     }
 
     public GraphicsCard(){
 
     }
 
-    public void setName(String cardName){
-        name = cardName;
-        String prefix = cardName.split(" ")[0];
+    public void setFullName(String cardName){
+        fullName = cardName;
+        String[] words = cardName.split(" ");
+        company = words[0];
+
+        if(fullName.contains("Notebook") || fullName.contains("Surface"))
+            isNotebook = true;
+        if(words[words.length - 1].contains("M"))
+            isNotebook = true;
+
+        if(fullName.contains("Titan"))
+            keyWord = fullName.substring(fullName.indexOf("Titan")).replace(" ", "%20");
+        else{
+            StringBuilder builder = new StringBuilder();
+            for(int i = 2; i < words.length; i ++){
+                builder.append(words[i]).append("%20");
+            }
+            keyWord = builder.toString();
+        }
+            //keyWord = cardName.substring(words[0].length() + words[1].length());
+
+        /*String prefix = cardName.split(" ")[0];
         switch (prefix){
             case "NVIDIA":
                 company = "Nvidia";
@@ -47,9 +57,11 @@ public class GraphicsCard implements Serializable {
             case "AMD":
                 company = "AMD";
                 break;
+            case "ATI":
+                company = "ATI";
             default:
                 company = "Unknown";
-        }
+        }*/
     }
 
     public void setType(String type) {
@@ -74,9 +86,9 @@ public class GraphicsCard implements Serializable {
     }
 
     private void writeObject(java.io.ObjectOutputStream out){
-        Log.w("writeObject", name);
+        //Log.w("writeObject", fullName);
         try{
-            out.write(name.getBytes());
+            out.write(fullName.getBytes());
             out.writeInt(benchmark);
             out.writeInt(highPrice);
             out.writeInt(lowPrice);
@@ -91,10 +103,9 @@ public class GraphicsCard implements Serializable {
         }
     }
     private void readObject(java.io.ObjectInputStream in){
-        Log.w("readObject", "");
+        //Log.w("readObject", "");
         try{
-
-            name = "test";
+            fullName = "test";
             benchmark = 1000;
             highPrice = 2000;
             lowPrice = 1000;
