@@ -2,7 +2,6 @@ package com.leon.gpumark;
 
 import android.content.Context;
 import android.os.AsyncTask;
-import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -31,12 +30,7 @@ import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Dictionary;
-import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
 
 public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
 
@@ -443,12 +437,12 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     private void requestPriceData(final int index){
         loadingAnimator.alpha(1);
         final String keyWord = cardArrayList.get(index).keyWord;
-        Log.w("request", xianyuRequestURL + keyWord);
+        Log.w("requestPriceData", xianyuRequestURL + keyWord);
         StringRequest stringRequest = new StringRequest(Request.Method.GET, xianyuRequestURL + keyWord,
                 new Response.Listener<String>() {
                     @Override
                     public void onResponse(String response) {
-                        Log.w("GPUMark", "onResponse " + keyWord);
+                        Log.w("requestPriceData", "onResponse " + keyWord);
                         loadingAnimator.alpha(0);
                         parsePriceData(response, keyWord);
                         if(index < cardArrayList.size() - 1){
@@ -461,13 +455,11 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                 new Response.ErrorListener() {
                     @Override
                     public void onErrorResponse(VolleyError error) {
-                        Log.w("GPUMark", "onErrorResponse " + keyWord);
+                        Log.w("requestPriceData", "onErrorResponse " + keyWord);
                         error.printStackTrace();
                         //progressLoading.setVisibility(View.INVISIBLE);
                         loadingAnimator.alpha(0);
                         Toast.makeText(MainActivity.this, "网络错误，请稍后重试", Toast.LENGTH_SHORT).show();
-                        //readData();
-                        //drawAllCharts();
                     }
                 }
         );
@@ -475,14 +467,14 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     }
 
     private void parsePriceData(String data, String keyWord){
-
+        Log.w("parsePriceData", keyWord);
         ArrayList<XianyuItem> list = new ArrayList<>();
         int start = 51200;
         while(start < data.length()) {
 
             start = data.indexOf("item-info", start + 1);
             if (start == -1)
-                return;
+                break;
 
             int hrefStart = data.indexOf("href", start) + 6; //存疑
             int hrefEnd = data.indexOf("target", hrefStart) - 2;
@@ -512,7 +504,9 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
             XianyuItem item = new XianyuItem(keyWord, title, href, price, location, briefDesc);
             list.add(item);
+            Log.w("list.size wtf ", list.size() + keyWord);
         }
+        Log.w("list.size ", list.size() + keyWord);
         analyzePriceData(list, keyWord);
         xianyuItemList.add(list);
     }
@@ -524,16 +518,18 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     }
 
     private void analyzePriceData(ArrayList<XianyuItem> list, String keyWord){
+        Log.w("analyzePriceData", keyWord + " " + list.size());
         GraphicsCard card = allCardMap.get(keyWord);
         int count = 0;
         float totalPrice = 0;
         for(int i = 0; i < list.size(); i ++){
             XianyuItem item = list.get(i);
-            if(!item.isInvalidItem()){
+            if(item.isValidItem()){
                 count ++;
                 totalPrice += item.price;
             }
         }
+        Log.w("wtf ", count + " " + totalPrice);
         float averagePrice = totalPrice / count;
         Log.w("analyzePriceData", keyWord + " " + averagePrice);
     }

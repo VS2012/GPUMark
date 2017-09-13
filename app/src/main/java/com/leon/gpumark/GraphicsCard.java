@@ -47,6 +47,11 @@ public class GraphicsCard implements Serializable {
             }
             keyWord = builder.toString();
         }
+
+        //很无奈，为 Pro Duo 特殊处理一下，不然结果没法用
+        if(fullName.equals("AMD Radeon Pro Duo"))
+            keyWord = "AMD%20Pro%20Duo";
+
             //keyWord = cardName.substring(words[0].length() + words[1].length());
 
         /*String prefix = cardName.split(" ")[0];
